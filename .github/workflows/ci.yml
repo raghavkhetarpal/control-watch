@@ -1,0 +1,65 @@
+name: AWM ControlWatch CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: awm_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: awm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Initialize database
+        run: |
+          PGPASSWORD=test_password psql -h localhost -U awm_test -d awm_test -f backend/database/schema.sql
+        env:
+          DATABASE_URL: postgresql://awm_test:test_password@localhost:5432/awm_test
+
+      - name: Run linting
+        run: |
+          pip install ruff
+          ruff check backend/ dashboard/ tests/ scripts/ --ignore E501
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=backend --cov-report=term-missing --cov-report=xml -x
+        env:
+          DATABASE_URL: postgresql://awm_test:test_password@localhost:5432/awm_test
+          AI_PROVIDER: none
+          SEC_DATA_DIR: ./data
+          SECRET_KEY: test-secret-key
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml

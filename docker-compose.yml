@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-awm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-awm_password}
+      POSTGRES_DB: ${POSTGRES_DB:-awm_controlwatch}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-awm} -d ${POSTGRES_DB:-awm_controlwatch}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-awm}:${POSTGRES_PASSWORD:-awm_password}@db:5432/${POSTGRES_DB:-awm_controlwatch}
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      SEC_DATA_DIR: /app/data
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SECRET_KEY: ${SECRET_KEY:-change-this-to-a-random-secret-key}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dashboard
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    environment:
+      API_URL: http://backend:8000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-awm}:${POSTGRES_PASSWORD:-awm_password}@db:5432/${POSTGRES_DB:-awm_controlwatch}
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+
+volumes:
+  pgdata:
