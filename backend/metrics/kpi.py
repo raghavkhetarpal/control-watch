@@ -98,12 +98,24 @@ def calculate_kpi_004(session, period_date: date) -> KPIResult:
 def calculate_kpi_005(session, period_date: date) -> KPIResult:
     """KPI-005 Exceptions Generated."""
     query = text('''
-        SELECT COUNT(*) 
+        SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN evidence->>'exception_type' = 'ANALYTICAL_EXCEPTION' THEN 1 END) as analytical,
+            COUNT(CASE WHEN evidence->>'exception_type' = 'DATA_QUALITY_EXCEPTION' THEN 1 END) as dq,
+            COUNT(CASE WHEN evidence->>'exception_type' = 'DATA_AVAILABILITY' THEN 1 END) as data_avail
         FROM control_exceptions 
         WHERE period_date = :period_date
     ''')
-    val = float(session.execute(query, {"period_date": period_date}).scalar() or 0)
-    return _create_kpi_result(session, period_date, "KPI-005", "Exceptions Generated", "count of control_exceptions for period", val, "exceptions")
+    row = session.execute(query, {"period_date": period_date}).fetchone()
+    val = float(row.total or 0) if row else 0.0
+    res = _create_kpi_result(session, period_date, "KPI-005", "Exceptions Generated", "count of control_exceptions for period", val, "exceptions")
+    if row:
+        res.metadata.update({
+            "analytical_exceptions": int(row.analytical or 0),
+            "data_quality_exceptions": int(row.dq or 0),
+            "data_availability_items": int(row.data_avail or 0),
+        })
+    return res
 
 def calculate_kpi_006(session, period_date: date) -> KPIResult:
     """KPI-006 Avg Processing Time."""

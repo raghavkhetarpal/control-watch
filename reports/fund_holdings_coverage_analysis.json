@@ -1,0 +1,166 @@
+{
+  "total_funds": 13199,
+  "total_holdings": 6025567,
+  "period_breakdown": [
+    {
+      "period_date": "2025-06-30",
+      "funds_expected": 6600,
+      "funds_with_holdings": 6597,
+      "funds_without_holdings": 3,
+      "coverage_ratio_pct": 99.9545,
+      "total_holdings": 2291229,
+      "avg_holdings_per_fund": 347.31
+    },
+    {
+      "period_date": "2025-07-31",
+      "funds_expected": 3984,
+      "funds_with_holdings": 3981,
+      "funds_without_holdings": 3,
+      "coverage_ratio_pct": 99.9247,
+      "total_holdings": 1300242,
+      "avg_holdings_per_fund": 326.61
+    },
+    {
+      "period_date": "2025-05-31",
+      "funds_expected": 2389,
+      "funds_with_holdings": 2389,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 2358671,
+      "avg_holdings_per_fund": 987.3
+    },
+    {
+      "period_date": "2025-05-30",
+      "funds_expected": 180,
+      "funds_with_holdings": 180,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 56801,
+      "avg_holdings_per_fund": 315.56
+    },
+    {
+      "period_date": "2025-03-31",
+      "funds_expected": 25,
+      "funds_with_holdings": 25,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 14620,
+      "avg_holdings_per_fund": 584.8
+    },
+    {
+      "period_date": "2025-04-30",
+      "funds_expected": 7,
+      "funds_with_holdings": 7,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 668,
+      "avg_holdings_per_fund": 95.43
+    },
+    {
+      "period_date": "2025-08-31",
+      "funds_expected": 6,
+      "funds_with_holdings": 6,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 2418,
+      "avg_holdings_per_fund": 403.0
+    },
+    {
+      "period_date": "2025-01-31",
+      "funds_expected": 4,
+      "funds_with_holdings": 4,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 448,
+      "avg_holdings_per_fund": 112.0
+    },
+    {
+      "period_date": "2025-02-28",
+      "funds_expected": 3,
+      "funds_with_holdings": 3,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 448,
+      "avg_holdings_per_fund": 149.33
+    },
+    {
+      "period_date": "2024-12-31",
+      "funds_expected": 1,
+      "funds_with_holdings": 1,
+      "funds_without_holdings": 0,
+      "coverage_ratio_pct": 100.0,
+      "total_holdings": 22,
+      "avg_holdings_per_fund": 22.0
+    }
+  ],
+  "investigation_results": [
+    {
+      "fund_id": 2003,
+      "accession_number": "0001752724-25-212684",
+      "series_id": "S_0002046200",
+      "fund_name": "AMG Pantheon Infrastructure Fund, LLC",
+      "period_of_report": "2025-06-30",
+      "total_assets": 100000.0,
+      "net_assets": 100000.0,
+      "classification": "NON_PORTFOLIO_FUND (Feeder / Seed Capital Vehicle)"
+    },
+    {
+      "fund_id": 4244,
+      "accession_number": "0001752724-25-205723",
+      "series_id": "S000059512",
+      "fund_name": "Franklin FTSE Hong Kong ETF",
+      "period_of_report": "2025-06-30",
+      "total_assets": 13462216.88,
+      "net_assets": 13461201.39,
+      "classification": "NO_HOLDINGS_REPORTED (Part C Schedule Omitted in SEC Filing)"
+    },
+    {
+      "fund_id": 11905,
+      "accession_number": "0001752724-25-205093",
+      "series_id": "S000063922",
+      "fund_name": "Baillie Gifford International Smaller Companies Fund",
+      "period_of_report": "2025-06-30",
+      "total_assets": 337735.89,
+      "net_assets": 287171.02,
+      "classification": "NO_HOLDINGS_REPORTED (Part C Schedule Omitted in SEC Filing)"
+    },
+    {
+      "fund_id": 4852,
+      "accession_number": "0000940400-25-002003",
+      "series_id": "S000083359",
+      "fund_name": "Polen Growth & Income Fund",
+      "period_of_report": "2025-07-31",
+      "total_assets": 7166081.49,
+      "net_assets": 7143268.11,
+      "classification": "NO_HOLDINGS_REPORTED (Part C Schedule Omitted in SEC Filing)"
+    },
+    {
+      "fund_id": 6617,
+      "accession_number": "0000910472-25-001913",
+      "series_id": "S000061578",
+      "fund_name": "BELMONT THETA INCOME FUND",
+      "period_of_report": "2025-07-31",
+      "total_assets": 16911854.17,
+      "net_assets": 16824220.49,
+      "classification": "NO_HOLDINGS_REPORTED (Part C Schedule Omitted in SEC Filing)"
+    },
+    {
+      "fund_id": 11493,
+      "accession_number": "0000940400-25-002445",
+      "series_id": "S000089308",
+      "fund_name": "PGIM S&P 500 Max Buffer ETF - August",
+      "period_of_report": "2025-07-31",
+      "total_assets": 2000025.0,
+      "net_assets": 2000025.0,
+      "classification": "NO_HOLDINGS_REPORTED (Part C Schedule Omitted in SEC Filing)"
+    }
+  ],
+  "quantiles_2025_06_30": {
+    "min": 1,
+    "p25": 34.0,
+    "median": 79.0,
+    "p75": 281.0,
+    "p95": 1369.1999999999982,
+    "max": 123341
+  }
+}

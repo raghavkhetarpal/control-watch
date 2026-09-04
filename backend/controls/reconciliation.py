@@ -22,11 +22,19 @@ class PeriodReconciliationControl(BaseControl):
     name = "Period-over-Period Reconciliation"
     description = "Compare holdings between consecutive reporting periods. Flag new, disappeared, and significantly changed positions."
     risk_category = "RECONCILIATION"
+    data_requirements = ["holdings.value (Period T)", "holdings.value (Period T-1)"]
 
     VALUE_CHANGE_THRESHOLD = 50.0  # percent
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
+
+        # Count current period holdings
+        scanned = session.execute(text("""
+            SELECT COUNT(*) FROM holdings h
+            JOIN funds f ON h.fund_id = f.id
+            WHERE f.period_of_report = :pd
+        """), {"pd": period_date}).scalar() or 0
 
         # Find previous period
         prev_period = session.execute(text("""
@@ -36,21 +44,23 @@ class PeriodReconciliationControl(BaseControl):
 
         if not prev_period:
             logger.info("rec001_no_previous_period", period=str(period_date))
+            duration_ms = int((time.time() - start_time) * 1000)
             return ControlResult(
-                control_id=self.control_id, name=self.name, status="COMPLETED",
-                records_scanned=0, exceptions_found=0, pass_rate=100.0,
-                duration_ms=int((time.time() - start_time) * 1000),
-                details={"note": "No previous period available for reconciliation"},
+                control_id=self.control_id,
+                name=self.name,
+                status="COMPLETED",
+                records_scanned=scanned,
+                exceptions_found=0,
+                pass_rate=100.0,
+                duration_ms=duration_ms,
+                testable_records=0,
+                passed_records=0,
+                not_testable_records=scanned,
+                data_requirements=self.data_requirements,
+                coverage_ratio=0.0,
+                evaluation_status="NOT_TESTABLE",
+                details={"note": "No previous period available in submissions for reconciliation"},
             )
-
-        # Count current period holdings
-        scanned = session.execute(text("""
-            SELECT COUNT(*) FROM holdings h
-            JOIN funds f ON h.fund_id = f.id
-            WHERE f.period_of_report = :pd
-        """), {"pd": period_date}).scalar() or 0
-
-        exceptions = []
 
         # Find funds present in both periods
         fund_pairs = session.execute(text("""
@@ -60,10 +70,22 @@ class PeriodReconciliationControl(BaseControl):
             JOIN funds f_prev ON f_curr.series_id = f_prev.series_id
             WHERE f_curr.period_of_report = :curr_pd
               AND f_prev.period_of_report = :prev_pd
-            LIMIT 100
         """), {"curr_pd": period_date, "prev_pd": prev_period}).mappings().all()
 
-        for fp in fund_pairs:
+        curr_fund_ids = [fp["curr_fund_id"] for fp in fund_pairs]
+        if curr_fund_ids:
+            testable = session.execute(text("""
+                SELECT COUNT(*) FROM holdings
+                WHERE fund_id = ANY(:fids)
+            """), {"fids": curr_fund_ids}).scalar() or 0
+        else:
+            testable = 0
+
+        not_testable = max(0, scanned - testable)
+        coverage_ratio = round(testable / scanned, 4) if scanned > 0 else 0.0
+
+        exceptions = []
+        for fp in fund_pairs[:100]:
             # Large value changes
             changes = session.execute(text("""
                 SELECT h_curr.name, h_curr.cusip,
@@ -89,6 +111,7 @@ class PeriodReconciliationControl(BaseControl):
                 exceptions.append({
                     "fund_id": c["fund_id"],
                     "severity": "HIGH" if float(c["value_change_pct"]) > 100 else "MEDIUM",
+                    "exception_type": "ANALYTICAL_EXCEPTION",
                     "description": (
                         f"Reconciliation exception: {c['name']} value changed "
                         f"{float(c['value_change_pct']):.1f}% "
@@ -108,12 +131,28 @@ class PeriodReconciliationControl(BaseControl):
                 })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, testable - len(exceptions))
+        pass_rate = round((passed / testable * 100), 2) if testable > 0 else 100.0
+        eval_status = "COMPLETED" if coverage_ratio >= 0.8 else ("PARTIAL" if testable > 0 else "NOT_TESTABLE")
 
         return ControlResult(
-            control_id=self.control_id, name=self.name, status="COMPLETED",
-            records_scanned=scanned, exceptions_found=len(exceptions),
-            pass_rate=pass_rate, duration_ms=duration_ms,
+            control_id=self.control_id,
+            name=self.name,
+            status="COMPLETED",
+            records_scanned=scanned,
+            exceptions_found=len(exceptions),
+            pass_rate=pass_rate,
+            duration_ms=duration_ms,
+            testable_records=testable,
+            passed_records=passed,
+            not_testable_records=not_testable,
+            data_requirements=self.data_requirements,
+            coverage_ratio=coverage_ratio,
+            evaluation_status=eval_status,
+            details={
+                "previous_period": str(prev_period),
+                "matched_funds": len(fund_pairs),
+            },
             exceptions=exceptions,
         )
 
@@ -126,8 +165,9 @@ class PortfolioCompletenessControl(BaseControl):
     name = "Portfolio Completeness"
     description = "Compare sum of holdings values vs fund total_assets. Flag significant discrepancies."
     risk_category = "RECONCILIATION"
+    data_requirements = ["funds.total_assets", "holdings.value"]
 
-    TOLERANCE_PCT = 5.0
+    TOLERANCE_PCT = 10.0  # Analytical tolerance for gross assets vs portfolio holdings
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
@@ -145,38 +185,85 @@ class PortfolioCompletenessControl(BaseControl):
 
         scanned = len(rows)
         exceptions = []
+        testable_funds = 0
+        not_testable_funds = 0
 
         for r in rows:
             total_assets = float(r["total_assets"])
             holdings_total = float(r["holdings_total"])
-            if total_assets > 0:
-                diff_pct = abs(holdings_total - total_assets) / total_assets * 100
-                if diff_pct > self.TOLERANCE_PCT:
-                    exceptions.append({
+            holding_count = r["holding_count"]
+
+            if holding_count == 0:
+                # Part C schedule was omitted in filing or not reported
+                not_testable_funds += 1
+                exceptions.append({
+                    "fund_id": r["fund_id"],
+                    "severity": "LOW",
+                    "exception_type": "DATA_AVAILABILITY",
+                    "description": (
+                        f"Holdings data unavailable for {r['fund_name']}: "
+                        f"Filing reports total assets ${total_assets:,.0f} but no holdings schedule (Part C) was provided."
+                    ),
+                    "evidence": {
                         "fund_id": r["fund_id"],
-                        "severity": "HIGH" if diff_pct > 20 else "MEDIUM",
-                        "description": (
-                            f"Portfolio completeness gap: {r['fund_name']} — "
-                            f"Holdings total ${holdings_total:,.0f} vs "
-                            f"Reported total ${total_assets:,.0f} "
-                            f"(difference: {diff_pct:.1f}%)"
-                        ),
-                        "evidence": {
-                            "fund_id": r["fund_id"],
-                            "fund_name": r["fund_name"],
-                            "reported_total_assets": str(total_assets),
-                            "calculated_holdings_total": str(holdings_total),
-                            "difference_pct": round(diff_pct, 2),
-                            "holding_count": r["holding_count"],
-                        },
-                    })
+                        "fund_name": r["fund_name"],
+                        "reported_total_assets": str(total_assets),
+                        "calculated_holdings_total": "0",
+                        "difference_pct": 100.0,
+                        "holding_count": 0,
+                        "reason": "NO_HOLDINGS_REPORTED",
+                    },
+                })
+                continue
+
+            testable_funds += 1
+            diff_pct = abs(holdings_total - total_assets) / total_assets * 100
+            if diff_pct > self.TOLERANCE_PCT:
+                exceptions.append({
+                    "fund_id": r["fund_id"],
+                    "severity": "HIGH" if diff_pct > 25.0 else "MEDIUM",
+                    "exception_type": "ANALYTICAL_EXCEPTION",
+                    "description": (
+                        f"Portfolio completeness variance: {r['fund_name']} — "
+                        f"Holdings total ${holdings_total:,.0f} vs "
+                        f"Reported total ${total_assets:,.0f} "
+                        f"(difference: {diff_pct:.1f}%)"
+                    ),
+                    "evidence": {
+                        "fund_id": r["fund_id"],
+                        "fund_name": r["fund_name"],
+                        "reported_total_assets": str(total_assets),
+                        "calculated_holdings_total": str(holdings_total),
+                        "difference_pct": round(diff_pct, 2),
+                        "holding_count": holding_count,
+                    },
+                })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        analytical_exceptions_count = sum(1 for e in exceptions if e["exception_type"] == "ANALYTICAL_EXCEPTION")
+        passed = max(0, testable_funds - analytical_exceptions_count)
+        pass_rate = round((passed / testable_funds * 100), 2) if testable_funds > 0 else 100.0
+        coverage_ratio = round(testable_funds / scanned, 4) if scanned > 0 else 1.0
+        eval_status = "COMPLETED" if coverage_ratio >= 0.95 else "PARTIAL"
 
         return ControlResult(
-            control_id=self.control_id, name=self.name, status="COMPLETED",
-            records_scanned=scanned, exceptions_found=len(exceptions),
-            pass_rate=pass_rate, duration_ms=duration_ms,
+            control_id=self.control_id,
+            name=self.name,
+            status="COMPLETED",
+            records_scanned=scanned,
+            exceptions_found=len(exceptions),
+            pass_rate=pass_rate,
+            duration_ms=duration_ms,
+            testable_records=testable_funds,
+            passed_records=passed,
+            not_testable_records=not_testable_funds,
+            data_requirements=self.data_requirements,
+            coverage_ratio=coverage_ratio,
+            evaluation_status=eval_status,
+            details={
+                "analytical_exceptions": analytical_exceptions_count,
+                "data_unavailable_records": not_testable_funds,
+                "tolerance_pct": self.TOLERANCE_PCT,
+            },
             exceptions=exceptions,
         )

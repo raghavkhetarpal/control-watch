@@ -13,40 +13,49 @@ st.caption("Investigate, triage, assign, and remediate operational and data exce
 
 # 1. Sidebar Filters
 st.sidebar.markdown("### Filter Exceptions")
-severity_filter = st.sidebar.multiselect("Severity", ["CRITICAL", "HIGH", "MEDIUM", "LOW"], default=["CRITICAL", "HIGH", "MEDIUM"])
+taxonomy_filter = st.sidebar.multiselect(
+    "Exception Taxonomy",
+    ["ANALYTICAL_EXCEPTION", "DATA_QUALITY_EXCEPTION", "DATA_AVAILABILITY"],
+    default=["ANALYTICAL_EXCEPTION", "DATA_QUALITY_EXCEPTION", "DATA_AVAILABILITY"]
+)
+severity_filter = st.sidebar.multiselect("Severity", ["CRITICAL", "HIGH", "MEDIUM", "LOW"], default=["CRITICAL", "HIGH", "MEDIUM", "LOW"])
 status_filter = st.sidebar.multiselect("Status", ["DETECTED", "TRIAGED", "ASSIGNED", "INVESTIGATING", "REMEDIATION_PLANNED", "REMEDIATION_IN_PROGRESS", "VALIDATION", "CLOSED"], default=["DETECTED", "TRIAGED", "ASSIGNED", "INVESTIGATING", "REMEDIATION_PLANNED", "REMEDIATION_IN_PROGRESS", "VALIDATION"])
 
 @st.cache_data(ttl=30)
-def load_exceptions(severities, statuses):
-    if not severities or not statuses:
+def load_exceptions(taxonomies, severities, statuses):
+    if not severities or not statuses or not taxonomies:
         return []
     with get_engine().connect() as conn:
         rows = conn.execute(
             text("""
-                SELECT ce.id, ce.control_id, ce.severity, ce.status, ce.risk_category,
+                SELECT ce.id, ce.control_id, ce.severity, ce.risk_level, ce.status, ce.risk_category,
+                       COALESCE(ce.evidence->>'exception_type', 'ANALYTICAL_EXCEPTION') as exception_type,
                        f.fund_name, ce.description, ce.detected_at, ce.evidence
                 FROM control_exceptions ce
                 LEFT JOIN funds f ON ce.fund_id = f.id
                 WHERE ce.severity = ANY(:sevs)
                   AND ce.status = ANY(:stats)
+                  AND COALESCE(ce.evidence->>'exception_type', 'ANALYTICAL_EXCEPTION') = ANY(:taxes)
                 ORDER BY ce.id DESC
                 LIMIT 100
             """),
-            {"sevs": list(severities), "stats": list(statuses)}
+            {"sevs": list(severities), "stats": list(statuses), "taxes": list(taxonomies)}
         ).mappings().all()
     return rows
 
-exceptions = load_exceptions(tuple(severity_filter), tuple(status_filter))
+exceptions = load_exceptions(tuple(taxonomy_filter), tuple(severity_filter), tuple(status_filter))
 
 st.markdown(f"### Active Exceptions ({len(exceptions)} displayed)")
 if exceptions:
     df_exc = pd.DataFrame([dict(e) for e in exceptions])
     st.dataframe(
-        df_exc[["id", "control_id", "severity", "status", "risk_category", "fund_name", "description"]],
+        df_exc[["id", "control_id", "exception_type", "severity", "risk_level", "status", "risk_category", "fund_name", "description"]],
         column_config={
             "id": "Exception ID",
             "control_id": "Control",
+            "exception_type": "Taxonomy Type",
             "severity": "Severity",
+            "risk_level": "Risk Level",
             "status": "Lifecycle Status",
             "risk_category": "Category",
             "fund_name": "Fund Name",

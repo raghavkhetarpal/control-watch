@@ -27,9 +27,25 @@ class TopHoldingsConcentrationControl(BaseControl):
     # Illustrative analytical thresholds
     GREEN_PCT = 35.0
     AMBER_PCT = 45.0
+    data_requirements = ["holdings.pct_val", "funds.period_of_report"]
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
+
+        total_funds = session.execute(text("""
+            SELECT COUNT(*) FROM funds WHERE period_of_report = :pd
+        """), {"pd": period_date}).scalar() or 0
+
+        scanned_holdings_funds = session.execute(text("""
+            SELECT COUNT(DISTINCT h.fund_id) FROM holdings h
+            JOIN funds f ON h.fund_id = f.id
+            WHERE f.period_of_report = :pd
+        """), {"pd": period_date}).scalar() or 0
+
+        testable = scanned_holdings_funds
+        records_scanned = total_funds if total_funds > 0 else testable
+        not_testable = max(0, records_scanned - testable)
+        coverage_ratio = round(testable / records_scanned, 4) if records_scanned > 0 else 1.0
 
         # Get fund-level top holdings concentration
         rows = session.execute(text("""
@@ -59,12 +75,6 @@ class TopHoldingsConcentrationControl(BaseControl):
             LIMIT 200
         """), {"pd": period_date, "green_threshold": self.GREEN_PCT}).mappings().all()
 
-        scanned = session.execute(text("""
-            SELECT COUNT(DISTINCT h.fund_id) FROM holdings h
-            JOIN funds f ON h.fund_id = f.id
-            WHERE f.period_of_report = :pd
-        """), {"pd": period_date}).scalar() or 0
-
         exceptions = []
         for r in rows:
             top10 = float(r["top10_pct"] or 0)
@@ -78,6 +88,7 @@ class TopHoldingsConcentrationControl(BaseControl):
             exceptions.append({
                 "fund_id": r["fund_id"],
                 "severity": severity,
+                "exception_type": "ANALYTICAL_EXCEPTION",
                 "description": (
                     f"Position concentration for {r['fund_name']}: "
                     f"Top-1={r['top1_pct']:.1f}%, Top-5={r['top5_pct']:.1f}%, Top-10={top10:.1f}% "
@@ -95,12 +106,16 @@ class TopHoldingsConcentrationControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, testable - len(exceptions))
+        pass_rate = round((passed / testable * 100), 2) if testable > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
-            records_scanned=scanned, exceptions_found=len(exceptions),
+            records_scanned=records_scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=testable, passed_records=passed, not_testable_records=not_testable,
+            data_requirements=self.data_requirements, coverage_ratio=coverage_ratio,
+            evaluation_status="COMPLETED" if coverage_ratio >= 0.95 else "PARTIAL",
             exceptions=exceptions,
         )
 
@@ -113,17 +128,27 @@ class IssuerConcentrationControl(BaseControl):
     name = "Issuer Concentration"
     description = "Calculate issuer-level exposure using illustrative analytical thresholds."
     risk_category = "CONCENTRATION"
+    data_requirements = ["holdings.pct_val", "holdings.lei", "holdings.name"]
 
     THRESHOLD_PCT = 25.0
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
 
-        scanned = session.execute(text("""
+        total_funds = session.execute(text("""
+            SELECT COUNT(*) FROM funds WHERE period_of_report = :pd
+        """), {"pd": period_date}).scalar() or 0
+
+        scanned_holdings_funds = session.execute(text("""
             SELECT COUNT(DISTINCT h.fund_id) FROM holdings h
             JOIN funds f ON h.fund_id = f.id
             WHERE f.period_of_report = :pd
         """), {"pd": period_date}).scalar() or 0
+
+        testable = scanned_holdings_funds
+        records_scanned = total_funds if total_funds > 0 else testable
+        not_testable = max(0, records_scanned - testable)
+        coverage_ratio = round(testable / records_scanned, 4) if records_scanned > 0 else 1.0
 
         # Group by fund + issuer (using LEI or first words of name as proxy)
         rows = session.execute(text("""
@@ -146,6 +171,7 @@ class IssuerConcentrationControl(BaseControl):
             exceptions.append({
                 "fund_id": r["fund_id"],
                 "severity": "HIGH" if float(r["issuer_pct"]) > 35 else "MEDIUM",
+                "exception_type": "ANALYTICAL_EXCEPTION",
                 "description": (
                     f"Issuer concentration: {r['issuer_key']} = {float(r['issuer_pct']):.1f}% "
                     f"in {r['fund_name']} ({r['position_count']} positions)"
@@ -160,12 +186,16 @@ class IssuerConcentrationControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, testable - len(exceptions))
+        pass_rate = round((passed / testable * 100), 2) if testable > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
-            records_scanned=scanned, exceptions_found=len(exceptions),
+            records_scanned=records_scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=testable, passed_records=passed, not_testable_records=not_testable,
+            data_requirements=self.data_requirements, coverage_ratio=coverage_ratio,
+            evaluation_status="COMPLETED" if coverage_ratio >= 0.95 else "PARTIAL",
             exceptions=exceptions,
         )
 
@@ -178,17 +208,27 @@ class AssetClassConcentrationControl(BaseControl):
     name = "Asset Class Concentration"
     description = "Calculate asset class concentration using illustrative analytical thresholds."
     risk_category = "CONCENTRATION"
+    data_requirements = ["holdings.pct_val", "holdings.asset_cat"]
 
     THRESHOLD_PCT = 80.0
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
 
-        scanned = session.execute(text("""
+        total_funds = session.execute(text("""
+            SELECT COUNT(*) FROM funds WHERE period_of_report = :pd
+        """), {"pd": period_date}).scalar() or 0
+
+        scanned_holdings_funds = session.execute(text("""
             SELECT COUNT(DISTINCT h.fund_id) FROM holdings h
             JOIN funds f ON h.fund_id = f.id
             WHERE f.period_of_report = :pd
         """), {"pd": period_date}).scalar() or 0
+
+        testable = scanned_holdings_funds
+        records_scanned = total_funds if total_funds > 0 else testable
+        not_testable = max(0, records_scanned - testable)
+        coverage_ratio = round(testable / records_scanned, 4) if records_scanned > 0 else 1.0
 
         rows = session.execute(text("""
             SELECT h.fund_id, f.fund_name, h.asset_cat,
@@ -208,6 +248,7 @@ class AssetClassConcentrationControl(BaseControl):
             exceptions.append({
                 "fund_id": r["fund_id"],
                 "severity": "MEDIUM",
+                "exception_type": "ANALYTICAL_EXCEPTION",
                 "description": (
                     f"Asset class concentration: {r['asset_cat']} = {float(r['cat_pct']):.1f}% "
                     f"in {r['fund_name']}"
@@ -221,12 +262,16 @@ class AssetClassConcentrationControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, testable - len(exceptions))
+        pass_rate = round((passed / testable * 100), 2) if testable > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
-            records_scanned=scanned, exceptions_found=len(exceptions),
+            records_scanned=records_scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=testable, passed_records=passed, not_testable_records=not_testable,
+            data_requirements=self.data_requirements, coverage_ratio=coverage_ratio,
+            evaluation_status="COMPLETED" if coverage_ratio >= 0.95 else "PARTIAL",
             exceptions=exceptions,
         )
 
@@ -239,17 +284,27 @@ class GeographicConcentrationControl(BaseControl):
     name = "Geographic Concentration"
     description = "Calculate geographic concentration using illustrative analytical thresholds."
     risk_category = "CONCENTRATION"
+    data_requirements = ["holdings.pct_val", "holdings.investment_country"]
 
     THRESHOLD_PCT = 85.0
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
 
-        scanned = session.execute(text("""
+        total_funds = session.execute(text("""
+            SELECT COUNT(*) FROM funds WHERE period_of_report = :pd
+        """), {"pd": period_date}).scalar() or 0
+
+        scanned_holdings_funds = session.execute(text("""
             SELECT COUNT(DISTINCT h.fund_id) FROM holdings h
             JOIN funds f ON h.fund_id = f.id
             WHERE f.period_of_report = :pd
         """), {"pd": period_date}).scalar() or 0
+
+        testable = scanned_holdings_funds
+        records_scanned = total_funds if total_funds > 0 else testable
+        not_testable = max(0, records_scanned - testable)
+        coverage_ratio = round(testable / records_scanned, 4) if records_scanned > 0 else 1.0
 
         rows = session.execute(text("""
             SELECT h.fund_id, f.fund_name, h.investment_country,
@@ -269,6 +324,7 @@ class GeographicConcentrationControl(BaseControl):
             exceptions.append({
                 "fund_id": r["fund_id"],
                 "severity": "LOW",
+                "exception_type": "ANALYTICAL_EXCEPTION",
                 "description": (
                     f"Geographic concentration: {r['investment_country']} = {float(r['country_pct']):.1f}% "
                     f"in {r['fund_name']}"
@@ -282,11 +338,15 @@ class GeographicConcentrationControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, testable - len(exceptions))
+        pass_rate = round((passed / testable * 100), 2) if testable > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
-            records_scanned=scanned, exceptions_found=len(exceptions),
+            records_scanned=records_scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=testable, passed_records=passed, not_testable_records=not_testable,
+            data_requirements=self.data_requirements, coverage_ratio=coverage_ratio,
+            evaluation_status="COMPLETED" if coverage_ratio >= 0.95 else "PARTIAL",
             exceptions=exceptions,
         )

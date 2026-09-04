@@ -65,36 +65,38 @@ GenAI-Assisted Analysis (optional)
 
 ---
 
-## 🔬 Real SEC N-PORT Data Validation & Benchmarks
+## 🔬 Real SEC N-PORT Full-Quarter Validation & Benchmarks
 
-The platform has been validated end-to-end against the official SEC DERA Form N-PORT bulk dataset (`2025q3_nport.zip`):
+The platform has been validated end-to-end against the complete population of the official SEC DERA Form N-PORT bulk dataset (`2025q3_nport.zip`):
 
-### 1. Ingestion Integrity
+### 1. Ingestion Integrity & Scale
 - **Official Dataset:** Form N-PORT Q3 2025 (468.9 MB ZIP, SHA-256: `4cc5c2431bf8997ef0af1cb7b69568255a1d6a1840e41499d9ffd1fc42e030f6`)
-- **Entities Loaded:** 13,199 submissions, 1,940 registrants, 13,103 fund series, 13,199 fund instances, 5,000 holdings
+- **Entities Loaded:** 13,199 submissions, 1,940 registrants, 13,103 fund series, 13,199 fund instances, **6,025,567 holdings** (2,291,229 active for reporting period `2025-06-30`)
+- **Fund ↔ Holding Coverage:** **99.95%** (6,597 of 6,600 active reporting funds have complete holdings schedules)
+- **Streaming Ingestion Throughput:** **34,284 rows/sec** (6,025,567 holdings loaded in 175.75s via PostgreSQL binary COPY protocol with 89.08 MB peak process RAM)
 - **Relational Integrity:** **0 orphan records**, **0 foreign key violations**, **0 duplicate holdings** on natural keys
-- **Pipeline Idempotency:** Sub-second duplicate run detection (0.4s) with zero record duplication
 
-### 2. Control Execution Benchmarks
-All 16 deterministic controls executed across **70,995 evaluated records** with **129 ms aggregate runtime** (average **8.06 ms** per control):
-- **High-Fidelity Anomaly Detection:** Detected Russian telecom ADR (`MOBILNYE TELESISTEMY PAO`) marked to $0 under sanctions in `VAL-001`; short positions in `DQ-003`; fund-of-funds portfolio concentrations in `CONC-001`; and late filings (65–74 days) in `RPT-001`.
-- **Exceptions Generated:** 9,542 exceptions with 100% queryable structured JSON evidence.
+### 2. Control Execution Benchmarks (Full Population)
+All 16 deterministic controls executed across **27,088,382 record evaluations** in **13.29 seconds aggregate runtime**:
+- **Portfolio Completeness (`REC-002`):** Validated across 6,597 testable funds with a **90.34% pass rate** (5,960 funds matching within 10% analytical tolerance; Vanguard Total Stock Market Index Fund matched within 0.18% across $1.915T in assets).
+- **High-Fidelity Anomaly Detection:** Detected Russian telecom ADR (`MOBILNYE TELESISTEMY PAO`) marked to $0 under sanctions in `VAL-001`; short positions in `DQ-003`; concentrated portfolios in `CONC-001`; and delayed filings in `RPT-001`.
+- **Taxonomy Classification:** Strict separation into **3,295 Analytical Exceptions**, **1,540 Data Quality Exceptions**, and **2,558 Data Availability Items** (mapped to `INSUFFICIENT_EVIDENCE` risk status).
 
 ### 3. Risk & Control Metrics
-- **7 Key Risk Indicators (KRIs):** Concentration Exposure (`71.27%` [RED]), Reconciliation Exception Rate (`56.86%` [RED]), Data Quality Exception Rate (`1.75%` [GREEN]), Valuation Anomaly Rate (`0.08%` [GREEN]), Reporting Timeliness (`56.07 days` [AMBER]), Exception Aging (`0.00 days` [GREEN]), Repeat Exception Rate (`0.00%` [GREEN]).
+- **7 Key Risk Indicators (KRIs):** Concentration Exposure (`RED`), Reconciliation Exception Rate (`9.70%` [AMBER]), Data Quality Exception Rate (`0.0168%` [GREEN]), Valuation Anomaly Rate (`0.0067%` [GREEN]), Reporting Timeliness (`56.07 days` [AMBER]), Exception Aging (`0.00 days` [GREEN]), Repeat Exception Rate (`0.00%` [GREEN]).
 - **7 Key Control Indicators (KCIs):** Control Execution Rate (`100.0%`), Evidence Completeness (`100.0%`), Control Coverage (`100.0%`).
-- **8 Operational KPIs:** 6,600 funds processed for period, 5,000 holdings, 70,995 total records, 100% automation coverage.
+- **8 Operational KPIs:** 6,600 funds processed, 2,291,229 period holdings, 6,096,562 total records, 100% automation coverage.
 
-### 4. Lifecycle & Governance
-- **Exception State Progression:** Verified live transition `DETECTED` → `TRIAGED` → `ASSIGNED` → `INVESTIGATING` → `REMEDIATION_PLANNED` → `REMEDIATION_IN_PROGRESS` → `VALIDATION` → `CLOSED` with 7 immutable audit trail records.
-- **AI Safety & Copilot:** 100% pass rate on prompt-injection tests (system override attempts, risk score overrides, untrusted fraud claims).
-- **Test Suite:** **92 automated tests passing with 100% pass rate in 0.28 seconds**.
+### 4. Lifecycle, Governance & Safety
+- **Exception State Progression:** Verified live transition `DETECTED` → `TRIAGED` → `ASSIGNED` → `INVESTIGATING` → `REMEDIATION_PLANNED` → `REMEDIATION_IN_PROGRESS` → `VALIDATION` → `CLOSED` with immutable audit trail.
+- **AI Safety & Missing Evidence Refusal:** 100% pass rate on prompt-injection defenses; explicit refusal string output when filing evidence is missing (`"There is insufficient evidence in the reported filings to determine whether this represents a genuine control breach."`).
+- **Test Suite:** **96 automated tests passing with 100% pass rate in 0.32 seconds**.
 
 Detailed verification reports:
-- [Final Validation Report](reports/FINAL_VALIDATION_REPORT.md)
-- [Control Execution Report](reports/control_execution_real_data.md)
-- [Metrics Report](reports/real_data_metrics.md)
-- [Database Integrity Report](reports/real_data_validation.md)
+- [Final Production Validation Report](reports/FINAL_VALIDATION_REPORT.md)
+- [Control Execution Full Data Report](reports/control_execution_full_data.md)
+- [Exception Integrity & Sample Artifact Analysis](reports/exception_integrity_analysis.md)
+- [Fund Coverage Analysis Report](reports/fund_holdings_coverage_analysis.json)
 
 ---
 

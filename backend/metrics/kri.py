@@ -78,22 +78,28 @@ def calculate_kri_001(session, period_date: date) -> KRIResult:
     )
 
 def calculate_kri_002(session, period_date: date) -> KRIResult:
-    """KRI-002 Reconciliation Exception Rate."""
+    """KRI-002 Reconciliation Exception Rate: analytical recon exceptions / testable reconciliations."""
     query = text('''
         SELECT 
-            SUM(exceptions_found) as numerator,
-            SUM(records_scanned) as denominator
+            COALESCE(SUM(CASE 
+                WHEN (execution_metadata->>'analytical_exceptions') IS NOT NULL 
+                THEN (execution_metadata->>'analytical_exceptions')::int
+                ELSE exceptions_found END), 0) as numerator,
+            COALESCE(SUM(CASE 
+                WHEN (execution_metadata->>'testable_records') IS NOT NULL 
+                THEN (execution_metadata->>'testable_records')::int
+                ELSE records_scanned END), 0) as denominator
         FROM control_executions
         WHERE period_date = :period_date AND control_id LIKE 'REC-%'
     ''')
     row = session.execute(query, {"period_date": period_date}).fetchone()
     num = float(row.numerator or 0)
     den = float(row.denominator or 0)
-    val = (num / den * 100) if den > 0 else 0.0
+    val = round((num / den * 100), 2) if den > 0 else 0.0
     
     return _create_kri_result(
         session, period_date, "KRI-002", "Reconciliation Exception Rate", 
-        "recon exceptions / total reconciliations performed (Derived)",
+        "analytical recon exceptions / total testable reconciliations (Derived)",
         num, den, val, "%", 5.0, 5.0, 15.0, True
     )
 

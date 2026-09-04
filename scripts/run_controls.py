@@ -36,7 +36,13 @@ def main():
             period_date = date.fromisoformat(args.period)
         else:
             period_date = session.execute(
-                text("SELECT MAX(period_of_report) FROM submissions")
+                text("""
+                    SELECT period_of_report 
+                    FROM funds 
+                    GROUP BY period_of_report 
+                    ORDER BY COUNT(*) DESC 
+                    LIMIT 1
+                """)
             ).scalar()
             if not period_date:
                 print("❌ No data found. Run ingestion first.")
@@ -49,14 +55,15 @@ def main():
             print(f"Running control {args.control}...")
             result = run_control(session, args.control, period_date)
             print(f"  {result.control_id}: {result.exceptions_found} exceptions "
-                  f"({result.pass_rate:.1f}% pass rate, {result.duration_ms}ms)")
+                  f"({result.pass_rate:.1f}% pass rate, {result.duration_ms}ms, "
+                  f"testable: {result.testable_records}/{result.records_scanned})")
         else:
             print("Running all controls...")
             results = run_all_controls(session, period_date)
-            print(f"\n{'Control':<12} {'Exceptions':>12} {'Pass Rate':>12} {'Duration':>12}")
-            print("-" * 52)
+            print(f"\n{'Control':<10} {'Scanned':>10} {'Testable':>10} {'Exceptions':>12} {'Pass Rate':>11} {'Coverage':>10} {'Duration':>10}")
+            print("-" * 78)
             for r in results:
-                print(f"{r.control_id:<12} {r.exceptions_found:>12} {r.pass_rate:>11.1f}% {r.duration_ms:>10}ms")
+                print(f"{r.control_id:<10} {r.records_scanned:>10} {r.testable_records:>10} {r.exceptions_found:>12} {r.pass_rate:>10.1f}% {r.coverage_ratio*100:>9.1f}% {r.duration_ms:>8}ms")
             total = sum(r.exceptions_found for r in results)
             print(f"\nTotal: {total} exceptions across {len(results)} controls")
 

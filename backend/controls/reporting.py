@@ -22,6 +22,7 @@ class ReportingTimelinessControl(BaseControl):
     name = "Reporting Timeliness"
     description = "Calculate days between reporting period end and filing date. Flag late filings."
     risk_category = "REPORTING"
+    data_requirements = ["submissions.filing_date", "submissions.period_of_report"]
 
     AMBER_DAYS = 60
     RED_DAYS = 90
@@ -54,6 +55,7 @@ class ReportingTimelinessControl(BaseControl):
                 exceptions.append({
                     "fund_id": r["fund_id"],
                     "severity": severity,
+                    "exception_type": "ANALYTICAL_EXCEPTION",
                     "description": (
                         f"Late filing: {r['fund_name']} filed {days_int} days after "
                         f"period end ({r['period_of_report']} → {r['filing_date']})"
@@ -70,12 +72,16 @@ class ReportingTimelinessControl(BaseControl):
                 })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, scanned - len(exceptions))
+        pass_rate = round((passed / scanned * 100), 2) if scanned > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
             records_scanned=scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=scanned, passed_records=passed, not_testable_records=0,
+            data_requirements=self.data_requirements, coverage_ratio=1.0,
+            evaluation_status="COMPLETED",
             exceptions=exceptions,
         )
 
@@ -88,6 +94,7 @@ class ReportingGapsControl(BaseControl):
     name = "Reporting Gaps"
     description = "For each fund series, identify expected quarters and flag gaps."
     risk_category = "REPORTING"
+    data_requirements = ["fund_series.series_id", "submissions.period_of_report"]
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
@@ -108,11 +115,12 @@ class ReportingGapsControl(BaseControl):
         scanned = len(rows)
         exceptions = []
 
-        # Simple gap detection: if a series has first period but no current period filing
+        # Gap detection: if a series has first period but no current period filing
         for r in rows:
             if r["last_period"] and r["last_period"] < period_date:
                 exceptions.append({
-                    "severity": "MEDIUM",
+                    "severity": "LOW",
+                    "exception_type": "DATA_AVAILABILITY",
                     "description": (
                         f"Reporting gap: {r['series_name']} last filed for {r['last_period']}, "
                         f"no filing for current period {period_date}"
@@ -128,11 +136,15 @@ class ReportingGapsControl(BaseControl):
                 })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, scanned - len(exceptions))
+        pass_rate = round((passed / scanned * 100), 2) if scanned > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
             records_scanned=scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=scanned, passed_records=passed, not_testable_records=0,
+            data_requirements=self.data_requirements, coverage_ratio=1.0,
+            evaluation_status="COMPLETED",
             exceptions=exceptions,
         )

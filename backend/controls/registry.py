@@ -21,13 +21,27 @@ def register_control(cls: Type[BaseControl]) -> Type[BaseControl]:
     return cls
 
 
+def _ensure_controls_loaded():
+    """Ensure all control modules are imported to populate registry."""
+    if not _CONTROLS:
+        from backend.controls import data_quality  # noqa: F401
+        from backend.controls import reconciliation  # noqa: F401
+        from backend.controls import valuation  # noqa: F401
+        from backend.controls import concentration  # noqa: F401
+        from backend.controls import liquidity  # noqa: F401
+        from backend.controls import reporting  # noqa: F401
+        from backend.controls import classification  # noqa: F401
+
+
 def get_all_controls() -> List[BaseControl]:
     """Returns list of instantiated control objects."""
+    _ensure_controls_loaded()
     return [cls() for cls in _CONTROLS.values()]
 
 
 def run_control(session: Session, control_id: str, period_date) -> ControlResult:
     """Runs a single control and records execution + exceptions in the database."""
+    _ensure_controls_loaded()
     cls = _CONTROLS.get(control_id)
     if not cls:
         raise ValueError(f"Control '{control_id}' not found in registry.")
@@ -55,57 +69,105 @@ def run_control(session: Session, control_id: str, period_date) -> ControlResult
         result.duration_ms = duration_ms
 
         # Insert individual exception records
+        from backend.risk_engine.scoring import score_exception
+
         for exc_data in result.exceptions:
-            evidence_json = json.dumps(exc_data.get("data", exc_data.get("evidence", {})), default=str)
+            exc_type = exc_data.get("exception_type", "ANALYTICAL_EXCEPTION")
+            score, risk_lvl, breakdown = score_exception(exc_data)
+            
+            evidence_dict = dict(exc_data.get("data", exc_data.get("evidence", {})))
+            evidence_dict["exception_type"] = exc_type
+            evidence_dict["score_breakdown"] = breakdown
+            evidence_json = json.dumps(evidence_dict, default=str)
+
+            impact = breakdown.get("impact", 3)
+            likelihood = breakdown.get("likelihood", 3)
+            ce = breakdown.get("control_effectiveness", 3)
+            inherent = impact * likelihood
+            residual = max(1, int(inherent * (1 - (ce / 5.0) * 0.8))) if risk_lvl != "INSUFFICIENT_EVIDENCE" else 1
+
             session.execute(
                 text("""
                     INSERT INTO control_exceptions
                         (control_id, execution_id, fund_id, holding_id,
                          severity, status, risk_category, description,
-                         evidence, period_date, detected_at)
+                         evidence, impact, likelihood, control_effectiveness,
+                         risk_score, inherent_risk_score, residual_risk_score,
+                         risk_level, period_date, detected_at)
                     VALUES
                         (:control_id, :exec_id, :fund_id, :holding_id,
                          :severity, 'DETECTED', :risk_category, :description,
-                         CAST(:evidence AS jsonb), :period_date, NOW())
+                         CAST(:evidence AS jsonb), :impact, :likelihood, :ce,
+                         :risk_score, :inherent, :residual,
+                         :risk_level, :period_date, NOW())
                 """),
                 {
                     "control_id": control_id,
                     "exec_id": exec_id,
                     "fund_id": exc_data.get("fund_id"),
                     "holding_id": exc_data.get("holding_id"),
-                    "severity": exc_data.get("severity", "MEDIUM"),
+                    "severity": exc_data.get("severity", "MEDIUM") if exc_type != "DATA_AVAILABILITY" else "LOW",
                     "risk_category": control.risk_category,
                     "description": exc_data.get("description", "Control exception detected"),
                     "evidence": evidence_json,
+                    "impact": impact,
+                    "likelihood": likelihood,
+                    "ce": ce,
+                    "risk_score": score,
+                    "inherent": inherent,
+                    "residual": residual,
+                    "risk_level": risk_lvl,
                     "period_date": period_date,
                 }
             )
 
-        # Calculate pass rate
-        if result.records_scanned > 0:
+        # Calculate pass rate on testable records
+        testable = result.testable_records if result.testable_records > 0 else result.records_scanned
+        if testable > 0:
+            analytical_exceptions = sum(
+                1 for e in result.exceptions if e.get("exception_type") != "DATA_AVAILABILITY"
+            )
             result.pass_rate = round(
-                (1 - result.exceptions_found / result.records_scanned) * 100, 2
+                max(0.0, (1 - analytical_exceptions / testable) * 100), 2
             )
         else:
             result.pass_rate = 100.0
+
+        if not result.data_requirements and getattr(control, "data_requirements", None):
+            result.data_requirements = control.data_requirements
+
+        metadata_json = json.dumps({
+            "testable_records": result.testable_records,
+            "passed_records": result.passed_records,
+            "not_testable_records": result.not_testable_records,
+            "data_requirements": result.data_requirements,
+            "coverage_ratio": result.coverage_ratio,
+            "evaluation_status": result.evaluation_status,
+            "details": result.details,
+        }, default=str)
+
+        exec_status = result.status if result.status in ('COMPLETED', 'PARTIAL') else 'COMPLETED'
 
         # Update execution record
         session.execute(
             text("""
                 UPDATE control_executions
-                SET status = 'COMPLETED',
+                SET status = :status,
                     completed_at = NOW(),
                     records_scanned = :scanned,
                     exceptions_found = :exceptions_found,
                     pass_rate = :pass_rate,
-                    duration_ms = :duration_ms
+                    duration_ms = :duration_ms,
+                    execution_metadata = CAST(:metadata AS jsonb)
                 WHERE id = :exec_id
             """),
             {
+                "status": exec_status,
                 "scanned": result.records_scanned,
                 "exceptions_found": result.exceptions_found,
                 "pass_rate": result.pass_rate,
                 "duration_ms": duration_ms,
+                "metadata": metadata_json,
                 "exec_id": exec_id,
             }
         )

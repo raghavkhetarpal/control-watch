@@ -22,9 +22,19 @@ class ClassificationChangesControl(BaseControl):
     name = "Classification Changes"
     description = "Detect period-over-period reclassifications of security asset_cat or issuer_cat."
     risk_category = "DATA_QUALITY"
+    data_requirements = [
+        "holdings.asset_cat (T)", "holdings.issuer_cat (T)",
+        "holdings.asset_cat (T-1)", "holdings.issuer_cat (T-1)"
+    ]
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
+
+        scanned = session.execute(text("""
+            SELECT COUNT(*) FROM holdings h
+            JOIN funds f ON h.fund_id = f.id
+            WHERE f.period_of_report = :pd AND h.cusip IS NOT NULL
+        """), {"pd": period_date}).scalar() or 0
 
         prev_period = session.execute(text("""
             SELECT MAX(period_of_report) FROM submissions
@@ -32,12 +42,31 @@ class ClassificationChangesControl(BaseControl):
         """), {"pd": period_date}).scalar()
 
         if not prev_period:
+            duration_ms = int((time.time() - start_time) * 1000)
             return ControlResult(
                 control_id=self.control_id, name=self.name, status="COMPLETED",
-                records_scanned=0, exceptions_found=0, pass_rate=100.0,
-                duration_ms=int((time.time() - start_time) * 1000),
+                records_scanned=scanned, exceptions_found=0, pass_rate=100.0,
+                duration_ms=duration_ms,
+                testable_records=0, passed_records=0, not_testable_records=scanned,
+                data_requirements=self.data_requirements, coverage_ratio=0.0,
+                evaluation_status="NOT_TESTABLE",
                 details={"note": "No previous period for classification comparison"},
             )
+
+        # Count common positions
+        testable = session.execute(text("""
+            SELECT COUNT(*)
+            FROM holdings h_curr
+            JOIN funds f_curr ON h_curr.fund_id = f_curr.id
+            JOIN funds f_prev ON f_curr.series_id = f_prev.series_id
+                AND f_prev.period_of_report = :prev_pd
+            JOIN holdings h_prev ON h_prev.fund_id = f_prev.id
+                AND h_prev.cusip = h_curr.cusip AND h_curr.cusip IS NOT NULL
+            WHERE f_curr.period_of_report = :curr_pd
+        """), {"curr_pd": period_date, "prev_pd": prev_period}).scalar() or 0
+
+        not_testable = max(0, scanned - testable)
+        coverage_ratio = round(testable / scanned, 4) if scanned > 0 else 0.0
 
         # Find holdings in both periods with changed classifications
         rows = session.execute(text("""
@@ -64,12 +93,6 @@ class ClassificationChangesControl(BaseControl):
             LIMIT 200
         """), {"curr_pd": period_date, "prev_pd": prev_period}).mappings().all()
 
-        scanned = session.execute(text("""
-            SELECT COUNT(*) FROM holdings h
-            JOIN funds f ON h.fund_id = f.id
-            WHERE f.period_of_report = :pd AND h.cusip IS NOT NULL
-        """), {"pd": period_date}).scalar() or 0
-
         exceptions = []
         for r in rows:
             changes = []
@@ -82,6 +105,7 @@ class ClassificationChangesControl(BaseControl):
                 "fund_id": r["fund_id"],
                 "holding_id": r["id"],
                 "severity": "LOW",
+                "exception_type": "ANALYTICAL_EXCEPTION",
                 "description": (
                     f"Classification change: {r['name']} ({r['cusip']}) — "
                     f"{', '.join(changes)} — requires review"
@@ -98,11 +122,16 @@ class ClassificationChangesControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, testable - len(exceptions))
+        pass_rate = round((passed / testable * 100), 2) if testable > 0 else 100.0
+        eval_status = "COMPLETED" if coverage_ratio >= 0.8 else ("PARTIAL" if testable > 0 else "NOT_TESTABLE")
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
             records_scanned=scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=testable, passed_records=passed, not_testable_records=not_testable,
+            data_requirements=self.data_requirements, coverage_ratio=coverage_ratio,
+            evaluation_status=eval_status,
             exceptions=exceptions,
         )

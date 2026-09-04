@@ -35,10 +35,10 @@ class AIAssistant:
         
         logger.info("ai_assistant_initialized", provider=self.provider)
 
-    def _call_llm(self, prompt: str, system_prompt: str) -> Tuple[str, int]:
+    def _call_llm(self, prompt: str, system_prompt: str, evidence: Optional[Dict[str, Any]] = None) -> Tuple[str, int]:
         """Abstract LLM call. Returns (text, tokens_used)."""
         if self.provider == 'none':
-            return self._fallback_response(prompt), 0
+            return self._fallback_response(prompt, evidence), 0
             
         if self.provider == 'openai' and self.openai_key:
             # Mock implementation for OpenAI
@@ -50,18 +50,41 @@ class AIAssistant:
             
         # Fallback if keys are missing
         logger.warning("missing_api_keys", provider=self.provider)
-        return self._fallback_response(prompt), 0
+        return self._fallback_response(prompt, evidence), 0
 
-    def _fallback_response(self, prompt: str) -> str:
+    def _fallback_response(self, prompt: str, evidence: Optional[Dict[str, Any]] = None) -> str:
         """Deterministic response when AI_PROVIDER='none'."""
+        if evidence is not None and (
+            evidence.get("exception_type") == "DATA_AVAILABILITY" or
+            evidence.get("is_data_unavailable") or
+            evidence.get("missing_evidence")
+        ):
+            return "There is insufficient evidence in the reported filings to determine whether this represents a genuine control breach."
         return "Template-based response: Analyzed structured evidence successfully (AI disabled). See raw evidence for details."
 
     def analyze(self, query: str, context_type: str, evidence: Dict[str, Any]) -> AIResponse:
         start_time = time.time()
         evidence_h = hash_evidence(evidence)
+
+        # Check for insufficient evidence upfront
+        if not evidence or (isinstance(evidence, dict) and (
+            evidence.get("exception_type") == "DATA_AVAILABILITY" or
+            evidence.get("is_data_unavailable") or
+            len(evidence) == 0
+        )):
+            response_text = "There is insufficient evidence in the reported filings to determine whether this represents a genuine control breach."
+            latency = (time.time() - start_time) * 1000
+            return AIResponse(
+                response=response_text,
+                evidence_hash=evidence_h,
+                validation_status="VALIDATED",
+                tokens_used=0,
+                latency_ms=latency,
+                validation_issues=[]
+            )
         
         prompt = GENERAL_ANALYSIS_PROMPT.format(query=query, evidence=json.dumps(evidence, default=str))
-        response_text, tokens = self._call_llm(prompt, SYSTEM_PROMPT)
+        response_text, tokens = self._call_llm(prompt, SYSTEM_PROMPT, evidence)
         
         validation = validate_ai_response(response_text, evidence)
         latency = (time.time() - start_time) * 1000

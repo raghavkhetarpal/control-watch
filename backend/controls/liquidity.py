@@ -53,9 +53,14 @@ class LiquidityProxyControl(BaseControl):
 
     ILLIQUID_AMBER_PCT = 15.0
     ILLIQUID_RED_PCT = 25.0
+    data_requirements = ["holdings.asset_cat", "holdings.issuer_cat", "holdings.pct_val"]
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
+
+        total_funds = session.execute(text("""
+            SELECT COUNT(*) FROM funds WHERE period_of_report = :pd
+        """), {"pd": period_date}).scalar() or 0
 
         # Get holdings with classifications
         rows = session.execute(text("""
@@ -92,7 +97,11 @@ class LiquidityProxyControl(BaseControl):
 
             fund_liquidity[fid][bucket] += pct
 
-        scanned = len(fund_liquidity)
+        testable = len(fund_liquidity)
+        records_scanned = total_funds if total_funds > 0 else testable
+        not_testable = max(0, records_scanned - testable)
+        coverage_ratio = round(testable / records_scanned, 4) if records_scanned > 0 else 1.0
+
         exceptions = []
 
         for fid, data in fund_liquidity.items():
@@ -102,6 +111,7 @@ class LiquidityProxyControl(BaseControl):
                 exceptions.append({
                     "fund_id": fid,
                     "severity": severity,
+                    "exception_type": "ANALYTICAL_EXCEPTION",
                     "description": (
                         f"Analytical liquidity-risk indicator: {data['fund_name']} has "
                         f"{illiquid_pct:.1f}% in less-liquid/illiquid assets "
@@ -121,11 +131,15 @@ class LiquidityProxyControl(BaseControl):
                 })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, testable - len(exceptions))
+        pass_rate = round((passed / testable * 100), 2) if testable > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
-            records_scanned=scanned, exceptions_found=len(exceptions),
+            records_scanned=records_scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=testable, passed_records=passed, not_testable_records=not_testable,
+            data_requirements=self.data_requirements, coverage_ratio=coverage_ratio,
+            evaluation_status="COMPLETED" if coverage_ratio >= 0.95 else "PARTIAL",
             exceptions=exceptions,
         )

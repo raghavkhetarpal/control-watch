@@ -25,6 +25,7 @@ class MissingRequiredFieldsControl(BaseControl):
     name = "Missing Required Fields"
     description = "Detect missing critical fields such as name, value, balance, percentage, and security identifiers."
     risk_category = "DATA_QUALITY"
+    data_requirements = ["holdings.name", "holdings.value", "holdings.cusip", "holdings.isin"]
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
@@ -71,6 +72,7 @@ class MissingRequiredFieldsControl(BaseControl):
                 "fund_id": r["fund_id"],
                 "holding_id": r["id"],
                 "severity": "HIGH" if "value" in missing else "MEDIUM",
+                "exception_type": "DATA_QUALITY_EXCEPTION",
                 "description": f"Missing required fields: {', '.join(missing)}",
                 "evidence": {
                     "holding_id": r["id"],
@@ -82,7 +84,8 @@ class MissingRequiredFieldsControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, scanned - len(exceptions))
+        pass_rate = round((passed / scanned * 100), 2) if scanned > 0 else 100.0
 
         logger.info("dq001_completed", records=scanned, exceptions=len(exceptions), duration_ms=duration_ms)
 
@@ -90,6 +93,9 @@ class MissingRequiredFieldsControl(BaseControl):
             control_id=self.control_id, name=self.name, status="COMPLETED",
             records_scanned=scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=scanned, passed_records=passed, not_testable_records=0,
+            data_requirements=self.data_requirements, coverage_ratio=1.0,
+            evaluation_status="COMPLETED",
             exceptions=exceptions,
         )
 
@@ -102,6 +108,7 @@ class DuplicateHoldingsControl(BaseControl):
     name = "Duplicate Holdings"
     description = "Detect duplicate holdings based on accession_number + cusip/name composite key."
     risk_category = "DATA_QUALITY"
+    data_requirements = ["holdings.accession_number", "holdings.cusip", "holdings.name"]
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
@@ -129,6 +136,7 @@ class DuplicateHoldingsControl(BaseControl):
             exceptions.append({
                 "fund_id": r["fund_id"],
                 "severity": "MEDIUM" if r["cnt"] == 2 else "HIGH",
+                "exception_type": "DATA_QUALITY_EXCEPTION",
                 "description": f"Duplicate holding: {r['name'] or r['cusip']} appears {r['cnt']} times",
                 "evidence": {
                     "accession_number": r["accession_number"],
@@ -139,12 +147,16 @@ class DuplicateHoldingsControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, scanned - len(exceptions))
+        pass_rate = round((passed / scanned * 100), 2) if scanned > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
             records_scanned=scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=scanned, passed_records=passed, not_testable_records=0,
+            data_requirements=self.data_requirements, coverage_ratio=1.0,
+            evaluation_status="COMPLETED",
             exceptions=exceptions,
         )
 
@@ -157,6 +169,7 @@ class InvalidValuesControl(BaseControl):
     name = "Invalid Values"
     description = "Detect negative quantities, impossible percentages, and invalid numeric values."
     risk_category = "DATA_QUALITY"
+    data_requirements = ["holdings.balance", "holdings.units", "holdings.pct_val", "holdings.value"]
 
     def execute(self, session: Session, period_date) -> ControlResult:
         start_time = time.time()
@@ -193,6 +206,7 @@ class InvalidValuesControl(BaseControl):
                 "fund_id": r["fund_id"],
                 "holding_id": r["id"],
                 "severity": "HIGH",
+                "exception_type": "DATA_QUALITY_EXCEPTION",
                 "description": f"Negative share balance: {r['name']} has balance {r['balance']}",
                 "evidence": {
                     "holding_id": r["id"],
@@ -208,6 +222,7 @@ class InvalidValuesControl(BaseControl):
                 "fund_id": r["fund_id"],
                 "holding_id": r["id"],
                 "severity": "HIGH",
+                "exception_type": "DATA_QUALITY_EXCEPTION",
                 "description": f"Impossible percentage: {r['name']} has pct_val {r['pct_val']}",
                 "evidence": {
                     "holding_id": r["id"],
@@ -218,12 +233,16 @@ class InvalidValuesControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, scanned - len(exceptions))
+        pass_rate = round((passed / scanned * 100), 2) if scanned > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
             records_scanned=scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=scanned, passed_records=passed, not_testable_records=0,
+            data_requirements=self.data_requirements, coverage_ratio=1.0,
+            evaluation_status="COMPLETED",
             exceptions=exceptions,
         )
 
@@ -236,6 +255,7 @@ class ClassificationConsistencyControl(BaseControl):
     name = "Classification Consistency"
     description = "Check that holdings have valid asset category and issuer category classifications."
     risk_category = "DATA_QUALITY"
+    data_requirements = ["holdings.asset_cat", "holdings.issuer_cat"]
 
     VALID_ASSET_CATS = {"EC", "EP", "DBT", "ABS", "STIV", "MF", "OTHER", "FND", "DE"}
     VALID_ISSUER_CATS = {"CORP", "USG", "USGA", "MUN", "FGN", "OTHER"}
@@ -271,6 +291,7 @@ class ClassificationConsistencyControl(BaseControl):
                 "fund_id": r["fund_id"],
                 "holding_id": r["id"],
                 "severity": "LOW",
+                "exception_type": "DATA_QUALITY_EXCEPTION",
                 "description": f"Missing classification: {', '.join(missing)} for {r['name']}",
                 "evidence": {
                     "holding_id": r["id"],
@@ -282,11 +303,15 @@ class ClassificationConsistencyControl(BaseControl):
             })
 
         duration_ms = int((time.time() - start_time) * 1000)
-        pass_rate = ((scanned - len(exceptions)) / scanned * 100) if scanned > 0 else 100.0
+        passed = max(0, scanned - len(exceptions))
+        pass_rate = round((passed / scanned * 100), 2) if scanned > 0 else 100.0
 
         return ControlResult(
             control_id=self.control_id, name=self.name, status="COMPLETED",
             records_scanned=scanned, exceptions_found=len(exceptions),
             pass_rate=pass_rate, duration_ms=duration_ms,
+            testable_records=scanned, passed_records=passed, not_testable_records=0,
+            data_requirements=self.data_requirements, coverage_ratio=1.0,
+            evaluation_status="COMPLETED",
             exceptions=exceptions,
         )

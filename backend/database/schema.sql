@@ -208,8 +208,8 @@ CREATE TABLE IF NOT EXISTS control_exceptions (
     risk_score INTEGER,
     inherent_risk_score INTEGER,
     residual_risk_score INTEGER,
-    risk_level VARCHAR(10)
-        CHECK (risk_level IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
+    risk_level VARCHAR(30)
+        CHECK (risk_level IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'INSUFFICIENT_EVIDENCE')),
     -- Root cause
     root_cause_category VARCHAR(50)
         CHECK (root_cause_category IS NULL OR root_cause_category IN (
