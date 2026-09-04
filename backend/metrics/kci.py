@@ -93,6 +93,22 @@ def _create_kci_result(
             :val, :unit, :green, :amber, :red, 
             :status, :trend, :prev, :metadata
         )
+        ON CONFLICT (kci_id, period_date) DO UPDATE SET
+            control_id = EXCLUDED.control_id,
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            numerator = EXCLUDED.numerator,
+            denominator = EXCLUDED.denominator,
+            value = EXCLUDED.value,
+            unit = EXCLUDED.unit,
+            threshold_green = EXCLUDED.threshold_green,
+            threshold_amber = EXCLUDED.threshold_amber,
+            threshold_red = EXCLUDED.threshold_red,
+            status = EXCLUDED.status,
+            trend = EXCLUDED.trend,
+            previous_value = EXCLUDED.previous_value,
+            metadata = EXCLUDED.metadata,
+            created_at = NOW()
     ''')
     session.execute(insert_query, {
         "kci_id": res.kci_id, "control_id": res.control_id, "name": res.name, "description": res.description,
@@ -107,15 +123,14 @@ def _create_kci_result(
 
 def calculate_kci_001(session, period_date: date) -> KCIResult:
     """KCI-001 Control Execution Rate."""
-    # Mocking active controls count as 100 for illustration
     query = text('''
         SELECT COUNT(DISTINCT control_id) as executed
         FROM control_executions
         WHERE period_date = :period_date
     ''')
-    executed = session.execute(query, {"period_date": period_date}).scalar() or 0
-    den = 100.0  # mock total active controls
-    val = (executed / den) * 100
+    executed = float(session.execute(query, {"period_date": period_date}).scalar() or 0)
+    den = float(session.execute(text("SELECT COUNT(*) FROM control_definitions WHERE is_active = TRUE")).scalar() or 16.0)
+    val = (executed / den) * 100 if den > 0 else 0.0
     
     return _create_kci_result(
         session, period_date, "KCI-001", "Control Execution Rate", 

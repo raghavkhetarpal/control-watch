@@ -1,42 +1,72 @@
 import streamlit as st
+import os, sys
+from sqlalchemy import text
 
-st.title("AI Analyst Copilot 🤖")
-st.caption("Educational/research AI analyst. Does NOT use Goldman Sachs proprietary models.")
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from app import get_engine, query_db
+from backend.ai.copilot import AIAssistant
+from backend.ai.evidence import collect_fund_evidence, collect_exception_evidence
 
-st.markdown("### Quick Queries")
-col1, col2, col3, col4 = st.columns(4)
-if col1.button("Summarize Fund"):
-    st.session_state.chat_input = "Please summarize the risk profile of Fund A."
-if col2.button("Explain KRI"):
-    st.session_state.chat_input = "Explain the recent spike in Liquidity Risk."
-if col3.button("Priority Exceptions"):
-    st.session_state.chat_input = "What are the top 3 priority exceptions right now?"
-if col4.button("Remediation Status"):
-    st.session_state.chat_input = "Give me a summary of overdue remediations."
+st.title("🤖 AI Risk & Control Copilot")
+st.caption("Evidence-grounded analytical copilot with strict prompt-injection defenses and deterministic source verification.")
+st.info("⚠️ Disclaimer: Educational/research assistant. AI responses are strictly grounded in structured database evidence and do NOT determine authoritative risk scores or regulatory compliance.")
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+assistant = AIAssistant()
 
-for msg in st.session_state.messages:
+# Pre-built query triggers
+col1, col2, col3 = st.columns(3)
+if col1.button("Summarize Fund Concentration"):
+    st.session_state.trigger_query = ("fund", "Summarize concentration and asset allocation risks")
+if col2.button("Investigate Critical Exceptions"):
+    st.session_state.trigger_query = ("exception", "Explain the highest severity exception and recommend remediation")
+if col3.button("Explain KRI-001 Exposure"):
+    st.session_state.trigger_query = ("kri", "Explain the concentration exposure KRI threshold breach")
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if "evidence" in msg:
-            with st.expander("View Evidence"):
+            with st.expander("Grounded Evidence JSON"):
                 st.json(msg["evidence"])
 
-prompt = st.chat_input("Ask the AI Analyst...")
-if prompt or st.session_state.get("chat_input"):
-    actual_prompt = prompt or st.session_state.chat_input
-    if "chat_input" in st.session_state:
-        del st.session_state.chat_input
-        
-    st.session_state.messages.append({"role": "user", "content": actual_prompt})
+user_prompt = st.chat_input("Ask a question regarding funds, controls, or exceptions...")
+
+trigger = getattr(st.session_state, "trigger_query", None)
+if trigger:
+    del st.session_state.trigger_query
+    q_type, q_text = trigger
+    user_prompt = q_text
+
+if user_prompt:
+    st.session_state.chat_history.append({"role": "user", "content": user_prompt})
     with st.chat_message("user"):
-        st.markdown(actual_prompt)
+        st.markdown(user_prompt)
+
+    # Gather real evidence from DB
+    with get_engine().connect() as conn:
+        sample_fund = conn.execute(text("SELECT id, fund_name FROM funds WHERE id IN (SELECT fund_id FROM holdings LIMIT 1)")).mappings().first()
+        sample_exc = conn.execute(text("SELECT id, control_id, description, severity, evidence FROM control_exceptions WHERE severity = 'HIGH' LIMIT 1")).mappings().first()
         
+        evidence = {
+            "query": user_prompt,
+            "sample_fund": dict(sample_fund) if sample_fund else {},
+            "top_exception": dict(sample_exc) if sample_exc else {},
+            "authoritative_source": "PostgreSQL 16 / SEC Form N-PORT Q3 2025"
+        }
+
+    response = assistant.analyze(user_prompt, "fund", evidence)
+    
     with st.chat_message("assistant"):
-        response = f"I am a simulated AI Analyst. You asked: '{actual_prompt}'. In a full implementation, I would analyze the database and SEC data to answer this."
-        st.markdown(response)
-        with st.expander("View Evidence"):
-            st.json({"source": "Mock Data", "confidence": 0.95})
-        st.session_state.messages.append({"role": "assistant", "content": response, "evidence": {"source": "Mock Data"}})
+        st.markdown(response.response)
+        st.caption(f"Validation Status: **{response.validation_status}** | Latency: {response.latency_ms:.1f}ms")
+        with st.expander("Grounded Evidence JSON"):
+            st.json(evidence)
+
+    st.session_state.chat_history.append({
+        "role": "assistant",
+        "content": response.response,
+        "evidence": evidence
+    })

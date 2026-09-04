@@ -14,7 +14,7 @@ from backend.ai.copilot import AIAssistant
 from backend.ai.evidence import collect_fund_evidence
 
 logger = structlog.get_logger(__name__)
-router = APIRouter(prefix="/ai", tags=["ai"])
+router = APIRouter(tags=["AI"])
 
 Base = declarative_base()
 

@@ -1,0 +1,186 @@
+{
+  "dataset": {
+    "quarter": "2025Q3",
+    "funds_count": 13199,
+    "series_count": 13103,
+    "registrants_count": 1940,
+    "submissions_count": 13199,
+    "holdings_count": 5000,
+    "unique_issuers_count": 2864,
+    "unique_cusips_count": 3972,
+    "reporting_periods_count": 10
+  },
+  "integrity": {
+    "orphan_holdings": 0,
+    "orphan_funds": 0,
+    "duplicate_holdings": 0,
+    "null_names": 102,
+    "null_cusips": 326,
+    "null_values": 0,
+    "negative_values": 81,
+    "negative_balances": 26,
+    "pct_val_out_of_bounds": 0,
+    "foreign_key_violations": 0
+  },
+  "distribution": {
+    "asset_categories": [
+      {
+        "cat": "DBT",
+        "cnt": 1672,
+        "avg_val": "4019682.08"
+      },
+      {
+        "cat": "EC",
+        "cnt": 1356,
+        "avg_val": "15307769.55"
+      },
+      {
+        "cat": "ABS",
+        "cnt": 1274,
+        "avg_val": "2545954.06"
+      },
+      {
+        "cat": "ABS-CBDO",
+        "cnt": 275,
+        "avg_val": "3084034.09"
+      },
+      {
+        "cat": "LON",
+        "cnt": 127,
+        "avg_val": "1253332.08"
+      },
+      {
+        "cat": "DFE",
+        "cnt": 87,
+        "avg_val": "18844.57"
+      },
+      {
+        "cat": "ABS-O",
+        "cnt": 77,
+        "avg_val": "2115773.00"
+      },
+      {
+        "cat": "DIR",
+        "cnt": 44,
+        "avg_val": "320132.05"
+      },
+      {
+        "cat": "DE",
+        "cnt": 30,
+        "avg_val": "1094488.24"
+      },
+      {
+        "cat": "STIV",
+        "cnt": 22,
+        "avg_val": "33100376.33"
+      }
+    ],
+    "issuer_categories": [
+      {
+        "cat": "CORP",
+        "cnt": 3365
+      },
+      {
+        "cat": "USGSE",
+        "cnt": 599
+      },
+      {
+        "cat": "USGA",
+        "cnt": 420
+      },
+      {
+        "cat": "NUSS",
+        "cnt": 212
+      },
+      {
+        "cat": "OTHER",
+        "cnt": 167
+      },
+      {
+        "cat": "RF",
+        "cnt": 125
+      },
+      {
+        "cat": "MUN",
+        "cnt": 69
+      },
+      {
+        "cat": "UST",
+        "cnt": 43
+      }
+    ],
+    "geographic_distribution": [
+      {
+        "country": "US",
+        "cnt": 4037
+      },
+      {
+        "country": "KY",
+        "cnt": 93
+      },
+      {
+        "country": "GB",
+        "cnt": 71
+      },
+      {
+        "country": "CA",
+        "cnt": 70
+      },
+      {
+        "country": "NULL",
+        "cnt": 65
+      },
+      {
+        "country": "MX",
+        "cnt": 49
+      },
+      {
+        "country": "IE",
+        "cnt": 34
+      },
+      {
+        "country": "BR",
+        "cnt": 33
+      },
+      {
+        "country": "FR",
+        "cnt": 30
+      },
+      {
+        "country": "IN",
+        "cnt": 28
+      }
+    ],
+    "top_reporting_periods": [
+      {
+        "period": "2025-06-30",
+        "funds": 6600
+      },
+      {
+        "period": "2025-07-31",
+        "funds": 3984
+      },
+      {
+        "period": "2025-05-31",
+        "funds": 2389
+      },
+      {
+        "period": "2025-05-30",
+        "funds": 180
+      },
+      {
+        "period": "2025-03-31",
+        "funds": 25
+      }
+    ]
+  },
+  "tables_summary": {
+    "submissions": 13199,
+    "registrants": 1940,
+    "fund_series": 13103,
+    "funds": 13199,
+    "holdings": 5000,
+    "reporting_periods": 10,
+    "ingestion_runs": 3
+  }
+}

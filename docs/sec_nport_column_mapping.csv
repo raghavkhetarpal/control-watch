@@ -1,0 +1,44 @@
+source_file,sec_column,db_table,db_column,data_type,transformation_notes
+SUBMISSION.tsv,ACCESSION_NUMBER,submissions,accession_number,VARCHAR(25),Strip whitespace; Primary Key
+SUBMISSION.tsv,FILING_DATE,submissions,filing_date,DATE,Parse with pd.to_datetime (e.g. 21-AUG-2025)
+SUBMISSION.tsv,REPORT_DATE,submissions,period_of_report,DATE,Parse with pd.to_datetime (e.g. 30-JUN-2025)
+SUBMISSION.tsv,SUB_TYPE,submissions,filing_type,VARCHAR(20),Direct mapping (e.g. NPORT-P)
+SUBMISSION.tsv,IS_LAST_FILING,funds,is_final_filing,BOOLEAN,Map Y/N to True/False
+REGISTRANT.tsv,CIK,registrants,cik,VARCHAR(20),Zero-pad to standard CIK string; Primary Key
+REGISTRANT.tsv,REGISTRANT_NAME,registrants,registrant_name,TEXT,Direct string
+REGISTRANT.tsv,LEI,registrants,lei,VARCHAR(20),Uppercase 20-char LEI
+REGISTRANT.tsv,ADDRESS1,registrants,street1,TEXT,Direct string
+REGISTRANT.tsv,CITY,registrants,city,TEXT,Direct string
+REGISTRANT.tsv,STATE,registrants,state,VARCHAR(10),Direct string (e.g. US-PR)
+REGISTRANT.tsv,COUNTRY,registrants,country,VARCHAR(10),ISO country code
+REGISTRANT.tsv,ZIP,registrants,zip,VARCHAR(20),Direct string
+REGISTRANT.tsv,PHONE,registrants,phone,VARCHAR(30),Direct string
+FUND_REPORTED_INFO.tsv,SERIES_ID,fund_series,series_id,VARCHAR(20),Series ID (e.g. S000075154); Primary Key
+FUND_REPORTED_INFO.tsv,SERIES_NAME,fund_series,series_name,TEXT,Series/Fund name
+FUND_REPORTED_INFO.tsv,ACCESSION_NUMBER,funds,accession_number,VARCHAR(25),Foreign Key to submissions
+FUND_REPORTED_INFO.tsv,SERIES_ID,funds,series_id,VARCHAR(20),Foreign Key to fund_series
+FUND_REPORTED_INFO.tsv,SERIES_NAME,funds,fund_name,TEXT,Direct string
+FUND_REPORTED_INFO.tsv,TOTAL_ASSETS,funds,total_assets,NUMERIC(20,2),Float numeric
+FUND_REPORTED_INFO.tsv,NET_ASSETS,funds,net_assets,NUMERIC(20,2),Float numeric
+FUND_REPORTED_INFO.tsv,TOTAL_LIABILITIES,funds,total_liabilities,NUMERIC(20,2),Float numeric
+FUND_REPORTED_HOLDING.tsv,ACCESSION_NUMBER,holdings,accession_number,VARCHAR(25),Foreign Key to submissions
+FUND_REPORTED_HOLDING.tsv,HOLDING_ID,holdings,holding_id,VARCHAR(50),Unique holding ID in filing
+FUND_REPORTED_HOLDING.tsv,ISSUER_NAME,holdings,name,TEXT,Security / Issuer name
+FUND_REPORTED_HOLDING.tsv,ISSUER_TITLE,holdings,title,TEXT,Title of security / class
+FUND_REPORTED_HOLDING.tsv,ISSUER_CUSIP,holdings,cusip,VARCHAR(9),Normalize to 9-char uppercase CUSIP
+FUND_REPORTED_HOLDING.tsv,ISSUER_LEI,holdings,lei,VARCHAR(20),Issuer LEI
+FUND_REPORTED_HOLDING.tsv,BALANCE,holdings,balance,NUMERIC(20,4),Holding quantity / share balance
+FUND_REPORTED_HOLDING.tsv,UNIT,holdings,units,VARCHAR(10),Units code (e.g. NS, PA)
+FUND_REPORTED_HOLDING.tsv,CURRENCY_CODE,holdings,currency_code,VARCHAR(3),ISO currency code (e.g. USD)
+FUND_REPORTED_HOLDING.tsv,CURRENCY_VALUE,holdings,value,NUMERIC(20,2),Valuation in USD / currency
+FUND_REPORTED_HOLDING.tsv,EXCHANGE_RATE,holdings,exchange_rate,NUMERIC(16,8),Forex rate if non-USD
+FUND_REPORTED_HOLDING.tsv,PERCENTAGE,holdings,pct_val,NUMERIC(10,6),Holding percentage of fund NAV
+FUND_REPORTED_HOLDING.tsv,PAYOFF_PROFILE,holdings,payoff_profile,VARCHAR(10),Direct string (e.g. Long, Short)
+FUND_REPORTED_HOLDING.tsv,ASSET_CAT,holdings,asset_cat,VARCHAR(10),Asset category code (e.g. EC, DBT, ABS-MBS)
+FUND_REPORTED_HOLDING.tsv,ISSUER_TYPE,holdings,issuer_cat,VARCHAR(10),Issuer category code (e.g. CORP, USG, MUN)
+FUND_REPORTED_HOLDING.tsv,INVESTMENT_COUNTRY,holdings,investment_country,VARCHAR(3),Country of investment
+FUND_REPORTED_HOLDING.tsv,IS_RESTRICTED_SECURITY,holdings,is_restricted,BOOLEAN,Map Y/N to True/False
+FUND_REPORTED_HOLDING.tsv,FAIR_VALUE_LEVEL,holdings,fair_value_level,VARCHAR(5),Fair value hierarchy level (1, 2, 3)
+IDENTIFIERS.tsv,HOLDING_ID,holdings,holding_id,VARCHAR(50),Join key to map ISIN and Ticker
+IDENTIFIERS.tsv,IDENTIFIER_ISIN,holdings,isin,VARCHAR(12),12-char ISIN
+IDENTIFIERS.tsv,IDENTIFIER_TICKER,holdings,ticker,VARCHAR(20),Ticker symbol

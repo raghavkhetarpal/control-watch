@@ -66,7 +66,7 @@ def run_control(session: Session, control_id: str, period_date) -> ControlResult
                     VALUES
                         (:control_id, :exec_id, :fund_id, :holding_id,
                          :severity, 'DETECTED', :risk_category, :description,
-                         :evidence::jsonb, :period_date, NOW())
+                         CAST(:evidence AS jsonb), :period_date, NOW())
                 """),
                 {
                     "control_id": control_id,
@@ -122,16 +122,20 @@ def run_control(session: Session, control_id: str, period_date) -> ControlResult
 
     except Exception as e:
         logger.error("control_execution_failed", control_id=control_id, error=str(e))
-        session.execute(
-            text("""
-                UPDATE control_executions
-                SET status = 'FAILED', completed_at = NOW(),
-                    error_message = :error
-                WHERE id = :exec_id
-            """),
-            {"exec_id": exec_id, "error": str(e)[:500]}
-        )
-        # Return a failed result rather than raising
+        session.rollback()
+        try:
+            session.execute(
+                text("""
+                    UPDATE control_executions
+                    SET status = 'FAILED', completed_at = NOW(),
+                        error_message = :error
+                    WHERE id = :exec_id
+                """),
+                {"exec_id": exec_id, "error": str(e)[:500]}
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
         return ControlResult(
             control_id=control_id,
             name=control.name,

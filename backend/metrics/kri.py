@@ -61,12 +61,10 @@ def _determine_trend(value: float, previous: Optional[float], lower_is_better: b
 
 def calculate_kri_001(session, period_date: date) -> KRIResult:
     """KRI-001 Concentration Exposure: max(top-10 holding %) across all funds for the period."""
-    # Assuming holding % data is stored in execution_metadata or we mock the calculation since holdings table isn't specified in detail
-    # We will use a mock query based on control_executions metadata for this illustrative analytical threshold.
     query = text('''
-        SELECT MAX(CAST(execution_metadata->>'top_10_holding_percent' AS FLOAT)) as max_exposure
-        FROM control_executions
-        WHERE period_date = :period_date
+        SELECT COALESCE(MAX(CAST(evidence->>'top10_pct' AS FLOAT)), 0.0) as max_exposure
+        FROM control_exceptions
+        WHERE period_date = :period_date AND control_id = 'CONC-001'
     ''')
     result = session.execute(query, {"period_date": period_date}).scalar()
     
@@ -86,7 +84,7 @@ def calculate_kri_002(session, period_date: date) -> KRIResult:
             SUM(exceptions_found) as numerator,
             SUM(records_scanned) as denominator
         FROM control_executions
-        WHERE period_date = :period_date AND execution_metadata->>'control_type' = 'RECONCILIATION'
+        WHERE period_date = :period_date AND control_id LIKE 'REC-%'
     ''')
     row = session.execute(query, {"period_date": period_date}).fetchone()
     num = float(row.numerator or 0)
@@ -106,7 +104,7 @@ def calculate_kri_003(session, period_date: date) -> KRIResult:
             SUM(exceptions_found) as numerator,
             SUM(records_scanned) as denominator
         FROM control_executions
-        WHERE period_date = :period_date AND execution_metadata->>'control_type' = 'DATA_QUALITY'
+        WHERE period_date = :period_date AND control_id LIKE 'DQ-%'
     ''')
     row = session.execute(query, {"period_date": period_date}).fetchone()
     num = float(row.numerator or 0)
@@ -126,7 +124,7 @@ def calculate_kri_004(session, period_date: date) -> KRIResult:
             SUM(exceptions_found) as numerator,
             SUM(records_scanned) as denominator
         FROM control_executions
-        WHERE period_date = :period_date AND execution_metadata->>'control_type' = 'VALUATION'
+        WHERE period_date = :period_date AND control_id LIKE 'VAL-%'
     ''')
     row = session.execute(query, {"period_date": period_date}).fetchone()
     num = float(row.numerator or 0)
@@ -143,9 +141,9 @@ def calculate_kri_005(session, period_date: date) -> KRIResult:
     """KRI-005 Reporting Timeliness."""
     query = text('''
         SELECT 
-            AVG(CAST(execution_metadata->>'filing_delay_days' AS FLOAT)) as avg_delay
-        FROM control_executions
-        WHERE period_date = :period_date AND execution_metadata->>'control_type' = 'REPORTING'
+            AVG(filing_date - period_of_report) as avg_delay
+        FROM submissions
+        WHERE period_of_report = :period_date
     ''')
     result = session.execute(query, {"period_date": period_date}).scalar()
     val = float(result) if result is not None else 0.0
@@ -227,6 +225,21 @@ def _create_kri_result(
             :val, :unit, :green, :amber, :red, 
             :status, :trend, :prev, :metadata
         )
+        ON CONFLICT (kri_id, period_date) DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            numerator = EXCLUDED.numerator,
+            denominator = EXCLUDED.denominator,
+            value = EXCLUDED.value,
+            unit = EXCLUDED.unit,
+            threshold_green = EXCLUDED.threshold_green,
+            threshold_amber = EXCLUDED.threshold_amber,
+            threshold_red = EXCLUDED.threshold_red,
+            status = EXCLUDED.status,
+            trend = EXCLUDED.trend,
+            previous_value = EXCLUDED.previous_value,
+            metadata = EXCLUDED.metadata,
+            created_at = NOW()
     ''')
     session.execute(insert_query, {
         "kri_id": res.kri_id, "name": res.name, "description": res.description,

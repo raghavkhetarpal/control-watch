@@ -12,6 +12,11 @@ st.set_page_config(
 def get_engine():
     return create_engine(os.environ.get('DATABASE_URL', 'postgresql://awm:awm_password@localhost:5432/awm_controlwatch'))
 
+def query_db(sql, params=None):
+    with get_engine().connect() as conn:
+        result = conn.execute(text(sql), params or {})
+        return result.mappings().all()
+
 st.sidebar.title("Navigation")
 st.sidebar.info("Select a page above to navigate.")
 

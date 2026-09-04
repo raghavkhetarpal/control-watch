@@ -40,7 +40,7 @@ def create_remediation(session, exception_id: str, owner: str, action: str, due_
         INSERT INTO remediation_items (
             exception_id, owner, action_description, due_date, priority, status
         ) VALUES (
-            :exception_id, :owner, :action, :due_date, :priority, 'PLANNED'
+            :exception_id, :owner, :action, :due_date, :priority, 'OPEN'
         ) RETURNING id
     ''')
     
@@ -121,14 +121,14 @@ def validate_remediation(session, remediation_id: int, result: str, validator: s
         
     update_query = text('''
         UPDATE remediation_items 
-        SET validation_result = :result, validated_at = CURRENT_TIMESTAMP, validated_by = :validator, status = 'CLOSED'
+        SET validation_result = :result, validated_at = CURRENT_TIMESTAMP, validated_by = :validator, status = 'VALIDATED'
         WHERE id = :id
     ''')
     session.execute(update_query, {"result": result, "validator": validator, "id": remediation_id})
     
     _create_audit_event(
         session, validator, "VALIDATE", str(remediation_id),
-        {"status": "COMPLETED"}, {"status": "CLOSED", "result": result}, None
+        {"status": "COMPLETED"}, {"status": "VALIDATED", "result": result}, None
     )
     
     if result.upper() == 'PASS':

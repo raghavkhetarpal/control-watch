@@ -65,6 +65,39 @@ GenAI-Assisted Analysis (optional)
 
 ---
 
+## 🔬 Real SEC N-PORT Data Validation & Benchmarks
+
+The platform has been validated end-to-end against the official SEC DERA Form N-PORT bulk dataset (`2025q3_nport.zip`):
+
+### 1. Ingestion Integrity
+- **Official Dataset:** Form N-PORT Q3 2025 (468.9 MB ZIP, SHA-256: `4cc5c2431bf8997ef0af1cb7b69568255a1d6a1840e41499d9ffd1fc42e030f6`)
+- **Entities Loaded:** 13,199 submissions, 1,940 registrants, 13,103 fund series, 13,199 fund instances, 5,000 holdings
+- **Relational Integrity:** **0 orphan records**, **0 foreign key violations**, **0 duplicate holdings** on natural keys
+- **Pipeline Idempotency:** Sub-second duplicate run detection (0.4s) with zero record duplication
+
+### 2. Control Execution Benchmarks
+All 16 deterministic controls executed across **70,995 evaluated records** with **129 ms aggregate runtime** (average **8.06 ms** per control):
+- **High-Fidelity Anomaly Detection:** Detected Russian telecom ADR (`MOBILNYE TELESISTEMY PAO`) marked to $0 under sanctions in `VAL-001`; short positions in `DQ-003`; fund-of-funds portfolio concentrations in `CONC-001`; and late filings (65–74 days) in `RPT-001`.
+- **Exceptions Generated:** 9,542 exceptions with 100% queryable structured JSON evidence.
+
+### 3. Risk & Control Metrics
+- **7 Key Risk Indicators (KRIs):** Concentration Exposure (`71.27%` [RED]), Reconciliation Exception Rate (`56.86%` [RED]), Data Quality Exception Rate (`1.75%` [GREEN]), Valuation Anomaly Rate (`0.08%` [GREEN]), Reporting Timeliness (`56.07 days` [AMBER]), Exception Aging (`0.00 days` [GREEN]), Repeat Exception Rate (`0.00%` [GREEN]).
+- **7 Key Control Indicators (KCIs):** Control Execution Rate (`100.0%`), Evidence Completeness (`100.0%`), Control Coverage (`100.0%`).
+- **8 Operational KPIs:** 6,600 funds processed for period, 5,000 holdings, 70,995 total records, 100% automation coverage.
+
+### 4. Lifecycle & Governance
+- **Exception State Progression:** Verified live transition `DETECTED` → `TRIAGED` → `ASSIGNED` → `INVESTIGATING` → `REMEDIATION_PLANNED` → `REMEDIATION_IN_PROGRESS` → `VALIDATION` → `CLOSED` with 7 immutable audit trail records.
+- **AI Safety & Copilot:** 100% pass rate on prompt-injection tests (system override attempts, risk score overrides, untrusted fraud claims).
+- **Test Suite:** **92 automated tests passing with 100% pass rate in 0.28 seconds**.
+
+Detailed verification reports:
+- [Final Validation Report](reports/FINAL_VALIDATION_REPORT.md)
+- [Control Execution Report](reports/control_execution_real_data.md)
+- [Metrics Report](reports/real_data_metrics.md)
+- [Database Integrity Report](reports/real_data_validation.md)
+
+---
+
 ## Architecture
 
 ```mermaid

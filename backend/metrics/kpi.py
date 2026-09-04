@@ -39,6 +39,13 @@ def _create_kpi_result(
             :kpi_id, :name, :description, :period_date, 
             :val, :unit, :metadata
         )
+        ON CONFLICT (kpi_id, period_date) DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            value = EXCLUDED.value,
+            unit = EXCLUDED.unit,
+            metadata = EXCLUDED.metadata,
+            created_at = NOW()
     ''')
     session.execute(insert_query, {
         "kpi_id": res.kpi_id, "name": res.name, "description": res.description,
@@ -50,11 +57,10 @@ def _create_kpi_result(
 
 def calculate_kpi_001(session, period_date: date) -> KPIResult:
     """KPI-001 Funds Processed."""
-    # Approximate by distinct funds in exceptions, since executions don't have fund_id
     query = text('''
-        SELECT COUNT(DISTINCT fund_id) 
-        FROM control_exceptions 
-        WHERE period_date = :period_date
+        SELECT COUNT(*) 
+        FROM funds 
+        WHERE period_of_report = :period_date
     ''')
     val = float(session.execute(query, {"period_date": period_date}).scalar() or 0)
     return _create_kpi_result(session, period_date, "KPI-001", "Funds Processed", "count of funds for period", val, "funds")
@@ -62,9 +68,10 @@ def calculate_kpi_001(session, period_date: date) -> KPIResult:
 def calculate_kpi_002(session, period_date: date) -> KPIResult:
     """KPI-002 Holdings Processed."""
     query = text('''
-        SELECT COUNT(DISTINCT holding_id) 
-        FROM control_exceptions 
-        WHERE period_date = :period_date
+        SELECT COUNT(*) 
+        FROM holdings h
+        JOIN funds f ON h.fund_id = f.id
+        WHERE f.period_of_report = :period_date
     ''')
     val = float(session.execute(query, {"period_date": period_date}).scalar() or 0)
     return _create_kpi_result(session, period_date, "KPI-002", "Holdings Processed", "count of holdings for period", val, "holdings")
@@ -72,12 +79,11 @@ def calculate_kpi_002(session, period_date: date) -> KPIResult:
 def calculate_kpi_003(session, period_date: date) -> KPIResult:
     """KPI-003 Total Records Processed."""
     query = text('''
-        SELECT SUM(records_scanned) 
-        FROM control_executions 
-        WHERE period_date = :period_date
+        SELECT COALESCE(SUM(rows_processed), 0) 
+        FROM ingestion_runs
     ''')
-    val = float(session.execute(query, {"period_date": period_date}).scalar() or 0)
-    return _create_kpi_result(session, period_date, "KPI-003", "Total Records Processed", "sum of records scanned in controls", val, "records")
+    val = float(session.execute(query).scalar() or 0)
+    return _create_kpi_result(session, period_date, "KPI-003", "Total Records Processed", "sum across ingestion_runs", val, "records")
 
 def calculate_kpi_004(session, period_date: date) -> KPIResult:
     """KPI-004 Controls Executed."""
